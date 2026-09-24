@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "category": "Memorie di Nozze",
+    "question": "Qual è l'evento tragicomico che ha caratterizzato il giorno del vostro matrimonio?",
+    "reference_answer": "Confronta le due versioni degli sposi!",
+    "notes": "La regia valuta se i ricordi coincidono o quale aneddoto è più divertente.",
+    "points": 100
+  },
+  {
+    "id": 2,
+    "category": "Colonna Sonora d'Amore",
+    "question": "Qual è la vostra canzone?",
+    "reference_answer": "La canzone del loro amore",
+    "notes": "Verifica se entrambi scrivono lo stesso titolo o artista!",
+    "points": 100
+  },
+  {
+    "id": 3,
+    "category": "I Momenti Più Belli",
+    "question": "Escludendo il giorno del matrimonio e il giorno della nascita dei figli, qual è stato il giorno più bello di questi 25 anni?",
+    "reference_answer": "Un viaggio, una vacanza o un giorno speciale indimenticabile",
+    "notes": "Valuta l'affinità emotiva della coppia e la concordanza del ricordo.",
+    "points": 100
+  },
+  {
+    "id": 4,
+    "category": "Amarcord & Storia",
+    "question": "Qual era il prezzo della benzina l'anno in cui vi siete sposati?",
+    "reference_answer": "Verifica chi si avvicina di più al prezzo reale in Lire/Euro dell'anno delle nozze",
+    "notes": "Se vi siete sposati nel 2001 era circa 2.000 lire/litro (~1,05 €/L). Vince chi si avvicina di più!",
+    "points": 100
+  },
+  {
+    "id": 5,
+    "category": "Date & Famiglia",
+    "question": "In che giorno della settimana è nato Simone?",
+    "reference_answer": "Giorno della settimana esatto (Lunedì, Martedì, Mercoledì, Giovedì, Venerdì, Sabato, Domenica)",
+    "notes": "La regia conosce la risposta esatta!",
+    "points": 100
+  },
+  {
+    "id": 6,
+    "category": "Date & Famiglia",
+    "question": "In che giorno della settimana è nato Andrea?",
+    "reference_answer": "Giorno della settimana esatto (Lunedì, Martedì, Mercoledì, Giovedì, Venerdì, Sabato, Domenica)",
+    "notes": "La regia conosce la risposta esatta!",
+    "points": 100
+  },
+  {
+    "id": 7,
+    "category": "Gusti & Cucina",
+    "question": "Qual è il piatto preferito di Antonio?",
+    "reference_answer": "Piatto del cuore di Antonio",
+    "notes": "Katia indovinerà la pietanza preferita di suo marito?",
+    "points": 100
+  },
+  {
+    "id": 8,
+    "category": "Viaggi & Desideri",
+    "question": "Qual è il luogo che avreste voluto visitare e non siete mai riusciti?",
+    "reference_answer": "La meta sognata da entrambi (o il desiderio di ciascuno)",
+    "notes": "Verifica se hanno lo stesso cassetto dei sogni da realizzare nei prossimi 25 anni!",
+    "points": 100
+  },
+  {
+    "id": 9,
+    "category": "Regali & Desideri",
+    "question": "Qual è il regalo che Katia aspetta da 25 anni?",
+    "reference_answer": "Il regalo tanto desiderato da Katia",
+    "notes": "Antonio sa cosa Katia desidera da un quarto di secolo?",
+    "points": 100
+  },
+  {
+    "id": 10,
+    "category": "Romanticismo",
+    "question": "Qual è stata la cena più romantica che avete vissuto in questi 25 anni?",
+    "reference_answer": "Ristorante, luogo o occasione della cena più romantica",
+    "notes": "Verifica se concordano sulla serata più romantica della loro vita insieme.",
+    "points": 100
+  },
+  {
+    "id": 11,
+    "category": "Isola Deserta",
+    "question": "Se tu fossi su un'isola deserta quale sarebbe l'unica cosa che porteresti con te? Cosa porterebbe tuo marito/tua moglie?",
+    "reference_answer": "Oggetto personale + oggetto indovinato per il partner",
+    "notes": "Doppia risposta: chi indovina anche cosa porterebbe l'altro vince punti bonus!",
+    "points": 100
+  },
+  {
+    "id": 12,
+    "category": "Imprevisti Domestici",
+    "question": "È mezzanotte, arriva un ospite inatteso e hai ancora lo stendino a vista. Come reagisci?",
+    "reference_answer": "Reazione diplomatica, panico o naturalezza?",
+    "notes": "La regia premia la risposta più sincera e divertente!",
+    "points": 100
+  },
+  {
+    "id": 13,
+    "category": "Disastri ai Fornelli",
+    "question": "La cena è irrimediabilmente bruciata perché una telefonata ha trattenuto Katia per lungo tempo. Come risolvi?",
+    "reference_answer": "Piano d'emergenza: pizza d'asporto, ristorante o risate?",
+    "notes": "Come gestisce la situazione la coppia?",
+    "points": 100
+  },
+  {
+    "id": 14,
+    "category": "Momenti da Genitori",
+    "question": "Torni a casa e trovi uno dei tuoi figli in una situazione inequivocabilmente imbarazzante, cosa fai?",
+    "reference_answer": "Reazione genitoriale: fuga strategica, finta di nulla o interrogatorio?",
+    "notes": "I figli (in regia) giudicano la migliore reazione!",
+    "points": 100
+  },
+  {
+    "id": 15,
+    "category": "Nozze d'Argento & Futuro",
+    "question": "Cosa ti serve per sopravvivere altri 25 anni a questo matrimonio?",
+    "reference_answer": "Pazienza, amore, umorismo o...?",
+    "notes": "La domanda finale per il gran sigillo delle Nozze d'Argento!",
+    "points": 100
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "question_timer_seconds": 60,
+  "intro_countdown_seconds": 5,
+  "enable_timer": true,
+  "timer_sound": true,
+  "couple_name": "Antonio & Katia",
+  "anniversary_years": 25
+}
