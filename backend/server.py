@@ -3,12 +3,19 @@ import json
 import socket
 import asyncio
 import time
+import shutil
 from typing import Dict, Set, Optional, Any
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+MEDIA_DIR = os.path.join(os.path.dirname(__file__), "media")
+os.makedirs(MEDIA_DIR, exist_ok=True)
+FRONTEND_PUBLIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "public")
+FRONTEND_DIST_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "dist")
+os.makedirs(FRONTEND_PUBLIC_DIR, exist_ok=True)
 
 def get_local_ip() -> str:
     try:
@@ -73,6 +80,9 @@ class QuizGame:
         self.screen_mode = "LOBBY" # LOBBY, INTRO_COUNTDOWN, QUESTION, ANSWERS, SCOREBOARD, RECAP, FINAL
         self.intro_countdown = 5
         self.is_counting_down = False
+        self.theme = getattr(self, "theme", "dark")
+        self.video_state = getattr(self, "video_state", {"action": "play", "timestamp": time.time(), "is_playing": True, "muted": False})
+        self.video_url = getattr(self, "video_url", "/media/celebration.mp4")
 
         self.players = {
             "player1": {
@@ -81,6 +91,8 @@ class QuizGame:
                 "connected": False,
                 "score": 0,
                 "current_answer": "",
+                "draft_answer": "",
+                "is_typing": False,
                 "has_answered": False,
                 "answered_at": None,
                 "is_revealed": False,
@@ -93,6 +105,8 @@ class QuizGame:
                 "connected": False,
                 "score": 0,
                 "current_answer": "",
+                "draft_answer": "",
+                "is_typing": False,
                 "has_answered": False,
                 "answered_at": None,
                 "is_revealed": False,
@@ -115,6 +129,7 @@ class QuizGame:
             "started_at": None,
             "enabled": app_config.get("enable_timer", True)
         }
+        self.show_qr: Optional[str] = None # None, "all", "player1", "player2"
         self.sound_event = None
 
     def get_current_question(self):
@@ -129,16 +144,28 @@ class QuizGame:
         self.is_counting_down = True
         self.sound_event = {"name": "countdown_tick", "count": seconds, "timestamp": time.time()}
 
+    def show_question_intro(self, index: int):
+        self.phase = "QUESTION_INTRO"
+        self.screen_mode = "QUESTION_INTRO"
+        self.current_question_index = index
+        self.is_counting_down = False
+        self.timer["active"] = False
+        self.timer["remaining"] = self.timer["duration"]
+        self.load_question_answers(index)
+        self.sound_event = {"name": "transition", "timestamp": time.time()}
+
     def start_game(self):
-        self.phase = "QUESTION"
-        self.screen_mode = "QUESTION"
         self.current_question_index = 0
         self.couple_score = 0
         self.answers_store = {}
         self.current_question_match = None
         self.is_counting_down = False
-        
-        self.load_question_answers(0)
+        self.show_question_intro(0)
+
+    def release_question(self):
+        self.phase = "QUESTION"
+        self.screen_mode = "QUESTION"
+        self.load_question_answers(self.current_question_index)
         self.start_question_timer()
         self.sound_event = {"name": "start_game", "timestamp": time.time()}
 
@@ -151,13 +178,17 @@ class QuizGame:
 
     def load_question_answers(self, index: int):
         stored = self.answers_store.get(index, {
-            "p1": "", "p2": "", "p1_done": False, "p2_done": False, "is_revealed": False, "match": None
+            "p1": "", "p2": "", "p1_draft": "", "p2_draft": "", "p1_done": False, "p2_done": False, "is_revealed": False, "match": None
         })
         self.players["player1"]["current_answer"] = stored.get("p1", "")
+        self.players["player1"]["draft_answer"] = stored.get("p1_draft", stored.get("p1", ""))
+        self.players["player1"]["is_typing"] = False
         self.players["player1"]["has_answered"] = stored.get("p1_done", False)
         self.players["player1"]["is_revealed"] = stored.get("is_revealed", False)
 
         self.players["player2"]["current_answer"] = stored.get("p2", "")
+        self.players["player2"]["draft_answer"] = stored.get("p2_draft", stored.get("p2", ""))
+        self.players["player2"]["is_typing"] = False
         self.players["player2"]["has_answered"] = stored.get("p2_done", False)
         self.players["player2"]["is_revealed"] = stored.get("is_revealed", False)
 
@@ -170,6 +201,8 @@ class QuizGame:
         self.answers_store[idx].update({
             "p1": self.players["player1"]["current_answer"],
             "p2": self.players["player2"]["current_answer"],
+            "p1_draft": self.players["player1"].get("draft_answer", ""),
+            "p2_draft": self.players["player2"].get("draft_answer", ""),
             "p1_done": self.players["player1"]["has_answered"],
             "p2_done": self.players["player2"]["has_answered"],
             "is_revealed": self.players["player1"]["is_revealed"] or self.players["player2"]["is_revealed"],
@@ -180,11 +213,7 @@ class QuizGame:
         self.save_current_question_answers()
         if self.current_question_index < len(questions_db) - 1:
             self.current_question_index += 1
-            self.phase = "QUESTION"
-            self.screen_mode = "QUESTION"
-            self.load_question_answers(self.current_question_index)
-            self.start_question_timer()
-            self.sound_event = {"name": "next_question", "timestamp": time.time()}
+            self.show_question_intro(self.current_question_index)
         else:
             self.finish_game()
 
@@ -192,26 +221,21 @@ class QuizGame:
         self.save_current_question_answers()
         if self.current_question_index > 0:
             self.current_question_index -= 1
-            self.phase = "QUESTION"
-            self.screen_mode = "QUESTION"
-            self.load_question_answers(self.current_question_index)
-            self.start_question_timer()
-            self.sound_event = {"name": "transition", "timestamp": time.time()}
+            self.show_question_intro(self.current_question_index)
 
     def jump_question(self, index: int):
         self.save_current_question_answers()
         if 0 <= index < len(questions_db):
             self.current_question_index = index
-            self.phase = "QUESTION"
-            self.screen_mode = "QUESTION"
-            self.load_question_answers(index)
-            self.start_question_timer()
-            self.sound_event = {"name": "transition", "timestamp": time.time()}
+            self.show_question_intro(index)
 
     def submit_answer(self, player_id: str, answer: str):
         if player_id in self.players:
             p = self.players[player_id]
-            p["current_answer"] = answer.strip()
+            clean_ans = answer.strip()
+            p["current_answer"] = clean_ans
+            p["draft_answer"] = clean_ans
+            p["is_typing"] = False
             p["has_answered"] = True
             p["answered_at"] = time.time()
             self.save_current_question_answers()
@@ -230,17 +254,11 @@ class QuizGame:
         self.sound_event = {"name": "reveal", "target": target, "timestamp": time.time()}
 
     def judge_couple(self, is_match: bool, points: int = 1):
-        idx = self.current_question_index
-        old_match = self.answers_store.get(idx, {}).get("match")
-        
-        # Adjust couple score if state changed
-        if old_match is True and not is_match:
-            self.couple_score = max(0, self.couple_score - points)
-        elif (old_match is not True) and is_match:
-            self.couple_score += points
-
         self.current_question_match = is_match
         self.save_current_question_answers()
+        
+        # Calculate couple_score reliably by counting all confirmed matches in answers_store
+        self.couple_score = sum(1 for ans in self.answers_store.values() if ans.get("match") is True)
         
         self.sound_event = {
             "name": "correct" if is_match else "wrong",
@@ -253,6 +271,10 @@ class QuizGame:
         self.screen_mode = "SCOREBOARD"
         self.sound_event = {"name": "scoreboard", "timestamp": time.time()}
 
+    def show_profiles(self):
+        self.screen_mode = "PROFILES"
+        self.sound_event = {"name": "scoreboard", "timestamp": time.time()}
+
     def show_recap(self):
         self.save_current_question_answers()
         self.screen_mode = "RECAP"
@@ -263,6 +285,14 @@ class QuizGame:
 
     def show_answers(self):
         self.screen_mode = "ANSWERS"
+
+    def show_video(self):
+        self.screen_mode = "VIDEO"
+        if not hasattr(self, "video_state") or not isinstance(self.video_state, dict):
+            self.video_state = {}
+        self.video_state["action"] = "play"
+        self.video_state["timestamp"] = time.time()
+        self.video_state["is_playing"] = True
 
     def finish_game(self):
         self.save_current_question_answers()
@@ -302,11 +332,16 @@ class QuizGame:
             "current_question_match": self.current_question_match,
             "answers_store": self.answers_store,
             "recap": self.get_full_recap(),
+            "all_questions": questions_db,
             "intro_countdown": self.intro_countdown,
             "is_counting_down": self.is_counting_down,
             "timer": self.timer,
             "config": app_config,
             "sound_event": self.sound_event,
+            "show_qr": self.show_qr,
+            "theme": getattr(self, "theme", "dark"),
+            "video_state": getattr(self, "video_state", {"action": "play", "timestamp": time.time(), "is_playing": True, "muted": False}),
+            "video_url": getattr(self, "video_url", "/media/celebration.mp4"),
             "server_ip": get_local_ip()
         }
 
@@ -355,6 +390,19 @@ class ConnectionManager:
             except Exception:
                 dead_sockets.append(ws)
         
+        for ws in dead_sockets:
+            self.disconnect(ws)
+
+    async def broadcast(self, message: dict):
+        if not self.active_connections:
+            return
+        raw = json.dumps(message)
+        dead_sockets = []
+        for ws in list(self.active_connections.keys()):
+            try:
+                await ws.send_text(raw)
+            except Exception:
+                dead_sockets.append(ws)
         for ws in dead_sockets:
             self.disconnect(ws)
 
@@ -442,6 +490,63 @@ async def api_reset():
     await manager.broadcast_state()
     return {"status": "ok", "message": "Database di gioco e risposte azzerate con successo."}
 
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+
+@app.get("/api/video-info")
+def api_video_info():
+    files = []
+    if os.path.exists(MEDIA_DIR):
+        files = [f for f in os.listdir(MEDIA_DIR) if f.lower().endswith(('.mp4', '.webm', '.mov', '.m4v'))]
+    exists = len(files) > 0
+    filename = files[0] if exists else "celebration.mp4"
+    path = os.path.join(MEDIA_DIR, filename) if exists else None
+    size = os.path.getsize(path) if exists and os.path.exists(path) else 0
+    return {
+        "exists": exists,
+        "filename": filename,
+        "url": f"/media/{filename}" if exists else getattr(game, "video_url", "/media/celebration.mp4"),
+        "size": size
+    }
+
+@app.post("/api/upload-video")
+async def api_upload_video(file: UploadFile = File(...)):
+    filename = file.filename or "celebration.mp4"
+    ext = os.path.splitext(filename)[1] or ".mp4"
+    target_name = f"celebration{ext}"
+    
+    media_path = os.path.join(MEDIA_DIR, target_name)
+    with open(media_path, "wb") as f_out:
+        shutil.copyfileobj(file.file, f_out)
+        
+    public_path = os.path.join(FRONTEND_PUBLIC_DIR, target_name)
+    try:
+        shutil.copyfile(media_path, public_path)
+    except Exception as e:
+        print(f"Error copying to public: {e}")
+        
+    if os.path.exists(FRONTEND_DIST_DIR):
+        dist_path = os.path.join(FRONTEND_DIST_DIR, target_name)
+        try:
+            shutil.copyfile(media_path, dist_path)
+        except Exception as e:
+            print(f"Error copying to dist: {e}")
+
+    timestamp = int(time.time())
+    game.video_url = f"/media/{target_name}?v={timestamp}"
+    game.video_state = {
+        "action": "restart",
+        "timestamp": timestamp,
+        "is_playing": True,
+        "filename": filename
+    }
+    await manager.broadcast_state()
+    return {
+        "status": "ok",
+        "filename": target_name,
+        "url": game.video_url,
+        "size": os.path.getsize(media_path)
+    }
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, role: str = "guest", name: Optional[str] = None):
     await manager.connect(websocket, role, name)
@@ -456,6 +561,8 @@ async def websocket_endpoint(websocket: WebSocket, role: str = "guest", name: Op
                 game.start_intro_countdown(sec)
             elif action == "START_GAME":
                 game.start_game()
+            elif action in ["START_QUESTION", "RELEASE_QUESTION"]:
+                game.release_question()
             elif action == "NEXT_QUESTION":
                 game.next_question()
             elif action == "PREV_QUESTION":
@@ -474,6 +581,8 @@ async def websocket_endpoint(websocket: WebSocket, role: str = "guest", name: Op
                 game.judge_couple(match, points)
             elif action == "SHOW_SCOREBOARD":
                 game.show_scoreboard()
+            elif action == "SHOW_PROFILES":
+                game.show_profiles()
             elif action == "SHOW_RECAP":
                 game.show_recap()
             elif action == "SHOW_QUESTION":
@@ -482,6 +591,26 @@ async def websocket_endpoint(websocket: WebSocket, role: str = "guest", name: Op
                 game.show_answers()
             elif action == "SHOW_FINAL":
                 game.finish_game()
+            elif action == "SHOW_VIDEO":
+                game.show_video()
+            elif action == "VIDEO_CONTROL":
+                sub = data.get("subAction")
+                if not hasattr(game, "video_state") or not isinstance(game.video_state, dict):
+                    game.video_state = {}
+                game.video_state["action"] = sub
+                game.video_state["timestamp"] = time.time()
+                if sub == "play":
+                    game.video_state["is_playing"] = True
+                elif sub == "pause":
+                    game.video_state["is_playing"] = False
+                elif sub == "toggle":
+                    game.video_state["is_playing"] = not game.video_state.get("is_playing", True)
+                elif sub == "restart":
+                    game.video_state["is_playing"] = True
+                elif sub == "mute":
+                    game.video_state["muted"] = True
+                elif sub == "unmute":
+                    game.video_state["muted"] = False
             elif action == "RESET_GAME":
                 game.reset_all()
                 manager.sync_game_connections()
@@ -502,6 +631,36 @@ async def websocket_endpoint(websocket: WebSocket, role: str = "guest", name: Op
                     game.timer["remaining"] += 15
             elif action == "PLAY_SOUND":
                 game.sound_event = {"name": data.get("sound"), "timestamp": time.time()}
+            elif action == "SET_SHOW_QR":
+                target = data.get("target")
+                if target in ["all", "player1", "player2"]:
+                    game.show_qr = target
+                else:
+                    game.show_qr = None
+            elif action == "TYPING_UPDATE":
+                player = data.get("player") or role
+                if player in game.players:
+                    text = data.get("text", "")
+                    game.players[player]["draft_answer"] = text
+                    game.players[player]["is_typing"] = bool(str(text).strip())
+            elif action == "SCREEN_SCROLL":
+                scroll_event = {
+                    "type": "SCREEN_SCROLL",
+                    "deltaY": data.get("deltaY"),
+                    "target": data.get("target"),
+                    "questionIndex": data.get("questionIndex"),
+                    "percent": data.get("percent"),
+                    "autoScroll": data.get("autoScroll"),
+                    "speed": data.get("speed", 1.0)
+                }
+                await manager.broadcast(scroll_event)
+                continue
+            elif action == "SET_THEME":
+                t = data.get("theme")
+                if t in ["dark", "light"]:
+                    game.theme = t
+                elif t == "toggle" or not t:
+                    game.theme = "light" if getattr(game, "theme", "dark") == "dark" else "dark"
             
             await manager.broadcast_state()
 

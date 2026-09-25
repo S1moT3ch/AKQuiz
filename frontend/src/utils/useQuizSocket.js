@@ -69,6 +69,8 @@ export function useQuizSocket(role = 'screen', playerName = '') {
                 else if (sound === 'applause') soundManager.playApplause();
               }
             }
+          } else if (message.type === 'SCREEN_SCROLL') {
+            window.dispatchEvent(new CustomEvent('ak_screen_scroll', { detail: message }));
           }
         } catch (err) {
           console.error('[WebSocket] Error parsing message:', err);
